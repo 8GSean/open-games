@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Spin Worlds — A No-Lose Beyblade Playground</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:#070e27}
+*{box-sizing:border-box}body{margin:0;overflow:hidden;touch-action:none}
+canvas{display:block;width:100vw;height:100vh;touch-action:none}
+#hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:start;gap:12px;pointer-events:none}
+.panel{background:#091431cd;border:1px solid #8ecbff66;border-radius:16px;padding:11px 15px;box-shadow:0 8px 24px #0005;backdrop-filter:blur(8px)}
+h1{margin:0;font-size:clamp(18px,3vw,25px);letter-spacing:.02em}
+small{color:#c4dcff}#score{font-size:24px;font-weight:800;color:#ffe372}
+#msg{position:fixed;top:21%;left:50%;transform:translateX(-50%);font-weight:900;font-size:clamp(21px,4vw,36px);text-shadow:0 3px 15px #000,0 0 22px #48edff;pointer-events:none;opacity:0;transition:opacity .25s;text-align:center;white-space:nowrap}
+#msg.show{opacity:1}#help{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font-size:13px;text-align:center;color:#e6f2ff;background:#07102ccf;padding:9px 16px;border-radius:50px;pointer-events:none;max-width:calc(100vw - 24px)}
+#actions{position:fixed;right:15px;bottom:64px;display:flex;gap:9px}
+button{font:800 16px system-ui;border:2px solid #fff8;color:white;border-radius:20px;padding:13px 17px;background:#245dc5dd;box-shadow:0 5px 0 #0d246b;touch-action:none;cursor:pointer}
+button:active{transform:translateY(3px);box-shadow:0 2px 0 #0d246b}
+#blast{background:#c12b9cdd}#jump{background:#168e91dd}
+#stick{position:fixed;bottom:80px;left:25px;width:125px;height:125px;border-radius:100%;background:#ffffff18;border:3px solid #ffffff55;display:none;touch-action:none}
+#knob{position:absolute;left:39px;top:39px;width:42px;height:42px;background:#a1e7ffac;border:2px solid #fff;border-radius:50%;pointer-events:none}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:#07102b;z-index:10;text-align:center;padding:24px}
+@media(pointer:coarse){#stick{display:block}#help{bottom:10px;font-size:11px}#actions{bottom:50px}button{padding:12px}}
+@media(max-width:600px){.panel{padding:8px 10px}h1{font-size:18px}#score{font-size:19px}#hud .right{font-size:12px}#help{display:none}#actions{bottom:25px}#stick{bottom:25px}}
+</style>
+</head>
+<body>
+<div id="loading"><div><h1>SPIN WORLDS</h1><p>Loading the playground…</p></div></div>
+<div id="hud">
+<div class="panel"><h1>🌀 SPIN WORLDS</h1><small>Explore • Bump • Collect • No losing</small></div>
+<div class="panel right">💎 <span id="score">0</span><div><small id="zone">Crystal Coast</small></div></div>
+</div>
+<div id="msg"></div><div id="stick"><div id="knob"></div></div>
+<div id="actions"><button id="jump" aria-label="Jump">↥ JUMP</button><button id="blast" aria-label="Shockwave">✦ BLAST</button></div>
+<div id="help">Move: WASD / arrows / left stick · Jump: Space / A · Shockwave: E / X · No enemies can defeat you</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x091733);scene.fog=new THREE.FogExp2(0x091733,.012);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.35;document.body.prepend(renderer.domElement);
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,400);camera.position.set(15,20,25);
+scene.add(new THREE.HemisphereLight(0xc4e6ff,0x273b73,2.4));
+const sun=new THREE.DirectionalLight(0xffefbe,3.2);sun.position.set(-16,28,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-65;sun.shadow.camera.right=65;sun.shadow.camera.top=65;sun.shadow.camera.bottom=-65;scene.add(sun);
+const mat=(color,metalness=0,roughness=.55)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
+const materials={blue:mat(0x32c6ec,.18),violet:mat(0xa362fb,.15),gold:mat(0xffcf61,.3),pink:mat(0xff5ea7,.2),green:mat(0x54df9b,.12),ramp:mat(0xff9e65,.1),dark:mat(0x182447),rock:mat(0x31477d),top:mat(0x00cfff,.65,.25)};
+function box(w,h,d,x,y,z,m,shadow=true){const a=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);a.position.set(x,y,z);a.receiveShadow=true;a.castShadow=shadow;scene.add(a);return a}
+function orb(r,x,y,z,m){const o=new THREE.Mesh(new THREE.SphereGeometry(r,12,8),m);o.position.set(x,y,z);scene.add(o);return o}
+function sparkle(x,y,z,color=0xffe87b,n=9){for(let i=0;i<n;i++){const p=orb(.09,x,y,z,new THREE.MeshBasicMaterial({color}));const a=Math.random()*Math.PI*2;particles.push({mesh:p,vel:new THREE.Vector3(Math.cos(a)*(.06+Math.random()*.17),.08+Math.random()*.18,Math.sin(a)*(.06+Math.random()*.17)),life:35+Math.random()*20})}}
+const particles=[],collectibles=[],rivals=[],breakables=[];
+const regions=[
+{name:'Crystal Coast',x:-24,z:0,w:22,d:26,y:0,color:materials.blue},
+{name:'Sky Gardens',x:0,z:0,w:22,d:26,y:3.5,color:materials.green},
+{name:'Sunset Summit',x:24,z:0,w:22,d:26,y:7,color:materials.violet}
+];
+// Elevated, safely connected platforms. Heights are determined by a surface sampler.
+for(const r of regions){box(r.w,1.35,r.d,r.x,r.y-.7,r.z,r.color);box(r.w+2,.65,r.d+2,r.x,r.y-1.7,r.z,materials.rock);for(let i=-1;i<=1;i++){const x=r.x+i*7;box(1.5,.6,1.5,x,r.y+.35,-11,materials.gold)}}
+// Ramps span the 2-unit gap between each adjacent platform. Rise is continuous across the full bridge.
+for(const x of [-12,12]){const lo=x===-12?0:3.5;const ramp=box(3.8,.45,9,x,lo+1.75,0,materials.ramp);ramp.rotation.z=-Math.atan2(3.5,3.8);ramp.geometry.dispose();ramp.geometry=new THREE.BoxGeometry(5.4,.45,9);ramp.rotation.z=-Math.atan2(3.5,5.4);box(5.2,.25,.35,x,lo+.05,-4.5,materials.gold,false);box(5.2,.25,.35,x,lo+3.5,4.5,materials.gold,false)}
+function surface(x,z){if(z<-13||z>13)return null;if(x>=-35&&x<=-13)return 0;if(x>-13&&x<-11)return (x+13)*1.75;if(x>=-11&&x<=11)return 3.5;if(x>11&&x<13)return 3.5+(x-11)*1.75;if(x>=13&&x<=35)return 7;return null}
+// Visual support beneath platforms
+for(const r of regions)for(const dz of [-9,9])for(const dx of [-7,7])box(1.3,7+r.y,1.3,r.x+dx,(r.y-7)/2,dz,materials.dark,false);
+function makeTop(color,scale=1){const group=new THREE.Group();const base=new THREE.Mesh(new THREE.CylinderGeometry(.88*scale,.57*scale,.34*scale,16),mat(color,.7,.28));base.position.y=.35*scale;base.castShadow=true;group.add(base);const ring=new THREE.Mesh(new THREE.TorusGeometry(.68*scale,.12*scale,7,24),mat(0xffe9a1,.68,.22));ring.rotation.x=Math.PI/2;ring.position.y=.49*scale;group.add(ring);const tip=new THREE.Mesh(new THREE.ConeGeometry(.32*scale,.55*scale,12),mat(0xdbeaff,.6));tip.rotation.x=Math.PI;tip.position.y=-.12*scale;group.add(tip);const cap=new THREE.Mesh(new THREE.CylinderGeometry(.24*scale,.24*scale,.12*scale,12),mat(0xffffff,.7));cap.position.y=.59*scale;group.add(cap);scene.add(group);return {group,base,ring,angle:0}}
+const player=makeTop(0x12dcff,1.1);let px=-27,pz=0,vy=0,jumpHeight=0,score=0,blastCooldown=0;
+function spawnCollectible(x,z){const y=surface(x,z);if(y===null)return;const g=new THREE.Group();const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.46),new THREE.MeshStandardMaterial({color:0xfff47a,emissive:0x9c4f00,emissiveIntensity:.7,metalness:.35,roughness:.2}));g.add(gem);g.position.set(x,y+1.5,z);scene.add(g);collectibles.push({g,x,z,phase:Math.random()*6.3,active:true})}
+for(const r of regions){for(let i=0;i<16;i++)spawnCollectible(r.x+(Math.random()-.5)*17,(Math.random()-.5)*21)}
+for(let i=0;i<9;i++){const r=regions[i%3];const x=r.x+(Math.random()-.5)*16,z=(Math.random()-.5)*18,t=makeTop([0xff6f9d,0xf5c148,0x7a8bff,0xb2ff8a][i%4],.84);rivals.push({t,x,z,vx:0,vz:0,phase:Math.random()*6.28})}
+function crystalTower(x,z){const y=surface(x,z);const g=new THREE.Group();for(let i=0;i<4;i++){const a=new THREE.Mesh(new THREE.BoxGeometry(.9,1,.9),i%2?materials.gold:materials.pink);a.position.y=.5+i;g.add(a)}g.position.set(x,y,z);scene.add(g);breakables.push({group:g,x,z,active:true,reset:0})}
+for(const r of regions)for(let i=0;i<4;i++)crystalTower(r.x+(Math.random()-.5)*16,(Math.random()-.5)*18);
+const keys=new Set(),touch={x:0,y:0};let msgTimer;
+function announce(t){const m=document.getElementById('msg');m.textContent=t;m.classList.add('show');clearTimeout(msgTimer);msgTimer=setTimeout(()=>m.classList.remove('show'),1100)}
+function jump(){if(jumpHeight<.05){vy=.22;announce('SUPER HOP!')}}
+function blast(){if(blastCooldown>0)return;blastCooldown=90;announce('MEGA SHOCKWAVE!');sparkle(px,surface(px,pz)+.8,pz,0x66edff,28);for(const r of rivals){const dx=r.x-px,dz=r.z-pz,d=Math.hypot(dx,dz);if(d<12){const mult=1.7/(d+.7);r.vx+=dx*mult;r.vz+=dz*mult;sparkle(r.x,surface(r.x,r.z)+.6,r.z)}}for(const b of breakables){if(b.active&&Math.hypot(b.x-px,b.z-pz)<10)breakTower(b)}}
+function breakTower(b){b.active=false;b.reset=200;b.group.visible=false;sparkle(b.x,surface(b.x,b.z)+2,b.z,0xffc662,22);score+=5;document.getElementById('score').textContent=score}
+addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')jump();if(e.code==='KeyE'||e.code==='KeyX')blast()});addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();touch.x=touch.y=0});
+document.getElementById('jump').addEventListener('pointerdown',e=>{e.preventDefault();jump()});document.getElementById('blast').addEventListener('pointerdown',e=>{e.preventDefault();blast()});
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');let stickId=null;
+stick.addEventListener('pointerdown',e=>{stickId=e.pointerId;stick.setPointerCapture(stickId);updateStick(e)});stick.addEventListener('pointermove',e=>{if(e.pointerId===stickId)updateStick(e)});function updateStick(e){const r=stick.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),l=Math.max(1,Math.hypot(dx,dy)),k=Math.min(1,l/48);touch.x=dx/l*k;touch.y=dy/l*k;knob.style.transform='translate('+touch.x*37+'px,'+touch.y*37+'px)'}function releaseStick(){stickId=null;touch.x=touch.y=0;knob.style.transform=''}stick.addEventListener('pointerup',releaseStick);stick.addEventListener('pointercancel',releaseStick);
+let last=performance.now(),time=0,gamepadA=false,gamepadX=false;
+function loop(now){requestAnimationFrame(loop);const dt=Math.min((now-last)/16.666,2);last=now;time+=dt*.016;let mx=touch.x,my=touch.y;if(keys.has('KeyA')||keys.has('ArrowLeft'))mx-=1;if(keys.has('KeyD')||keys.has('ArrowRight'))mx+=1;if(keys.has('KeyW')||keys.has('ArrowUp'))my-=1;if(keys.has('KeyS')||keys.has('ArrowDown'))my+=1;
+const gp=navigator.getGamepads?.()[0];if(gp){const dead=v=>Math.abs(v)>.16?v:0;mx+=dead(gp.axes[0]||0);my+=dead(gp.axes[1]||0);const a=!!gp.buttons[0]?.pressed,x=!!gp.buttons[2]?.pressed;if(a&&!gamepadA)jump();if(x&&!gamepadX)blast();gamepadA=a;gamepadX=x}
+const len=Math.max(1,Math.hypot(mx,my));mx/=len;my/=len;const speed=.17*dt;
+// Moving forward on the screen travels toward -Z. Stay on safe platforms; never fall.
+let nx=px+mx*speed,nz=pz+my*speed;if(surface(nx,nz)!==null){px=nx;pz=nz}else{if(surface(nx,pz)!==null)px=nx;if(surface(px,nz)!==null)pz=nz}
+vy-=.012*dt;jumpHeight=Math.max(0,jumpHeight+vy*dt);if(jumpHeight===0)vy=0;const ground=surface(px,pz);player.group.position.set(px,ground+.72+jumpHeight+Math.sin(time*9)*.035,pz);player.group.rotation.y+=.24*dt;
+for(const r of rivals){r.phase+=dt*.015;r.vx+=Math.sin(r.phase*2)*.007*dt;r.vz+=Math.cos(r.phase*1.4)*.007*dt;r.vx*=.972;r.vz*=.972;let rx=r.x+r.vx*dt,rz=r.z+r.vz*dt;if(surface(rx,rz)!==null){r.x=rx;r.z=rz}else{r.vx*=-.7;r.vz*=-.7}const d=Math.hypot(r.x-px,r.z-pz);if(d<1.9){const dx=(r.x-px)/Math.max(d,.01),dz=(r.z-pz)/Math.max(d,.01);r.vx+=dx*.13;r.vz+=dz*.13;if(Math.random()<.045){sparkle(r.x,surface(r.x,r.z)+.65,r.z,0xffd46c,5);score++;document.getElementById('score').textContent=score}}r.t.group.position.set(r.x,surface(r.x,r.z)+.7+Math.sin(time*6+r.phase)*.06,r.z);r.t.group.rotation.y+=.22*dt}
+for(const c of collectibles){if(!c.active)continue;c.g.rotation.y+=.025*dt;c.g.position.y=surface(c.x,c.z)+1.5+Math.sin(time*3+c.phase)*.22;const d=Math.hypot(c.x-px,c.z-pz);if(d<3){c.x+=(px-c.x)*.09*dt;c.z+=(pz-c.z)*.09*dt}if(d<1.2){c.active=false;scene.remove(c.g);score+=10;document.getElementById('score').textContent=score;sparkle(px,ground+1,pz,0xfff780,8);if(score%100<10)announce('GEM BONUS!')}}
+for(const b of breakables){if(!b.active){b.reset-=dt;if(b.reset<=0){b.active=true;b.group.visible=true}}else if(Math.hypot(b.x-px,b.z-pz)<1.5)breakTower(b)}
+for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.mesh.position.addScaledVector(p.vel,dt);p.vel.y-=.008*dt;p.life-=dt;p.mesh.scale.multiplyScalar(.97);if(p.life<=0){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();particles.splice(i,1)}}
+blastCooldown=Math.max(0,blastCooldown-dt);document.getElementById('blast').style.opacity=blastCooldown>0?'.55':'1';
+const target=new THREE.Vector3(px+16,ground+20,pz+23);camera.position.lerp(target,.045);camera.lookAt(px,ground,pz);
+document.getElementById('zone').textContent=px<-12?'Crystal Coast':px<12?'Sky Gardens':'Sunset Summit';
+renderer.render(scene,camera)}
+requestAnimationFrame(loop);document.getElementById('loading').remove();announce('EXPLORE ALL 3 WORLDS!');
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body></html>
